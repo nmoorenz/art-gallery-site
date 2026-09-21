@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""
+Builds a local preview of the gallery from the committed example/ folder --
+no AWS, no real data required. Reads example/artwork.csv and its matching
+example/<id>.<ext> images, and writes site/manifest.json plus
+site/sample-photos/ (both gitignored) so `python -m http.server` in site/
+can serve them.
+
+Usage:
+    python scripts/build_local_preview.py
+
+Safe to re-run; overwrites site/sample-photos/ and site/manifest.json.
+Not part of the real sync pipeline -- see sync_gallery.py for that, and
+example/README.md for what's in example/ and why.
+"""
+import csv
+import json
+import sys
+from pathlib import Path
+
+from PIL import Image, ImageOps
+
+ROOT = Path(__file__).resolve().parent.parent
+EXAMPLE_DIR = ROOT / "example"
+EXAMPLE_CSV = EXAMPLE_DIR / "artwork.csv"
+SITE = ROOT / "site"
+OUT_PHOTOS = SITE / "sample-photos"
+
+VALID_EXT = {".jpg", ".jpeg", ".png"}
+
+
+def find_photo(piece_id: str):
+    for ext in VALID_EXT:
+        candidate = EXAMPLE_DIR / f"{piece_id}{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def main():
+    if not EXAMPLE_CSV.exists():
+        sys.exit(f"Missing {EXAMPLE_CSV} -- is the example/ folder intact?")
+
+    OUT_PHOTOS.mkdir(parents=True, exist_ok=True)
+    with EXAMPLE_CSV.open(newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+
+    pieces = []
+    for row in rows:
+        piece_id = row["id"].strip()
+        photo = find_photo(piece_id)
+        if not photo:
+            print(f"WARN: skipping {piece_id} -- no photo found in {EXAMPLE_DIR}/")
+            continue
+
+        dest = OUT_PHOTOS / f"{piece_id}.jpg"
+        with Image.open(photo) as img:
+            img = ImageOps.exif_transpose(img)
+            aspect = img.width / img.height
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(dest, "JPEG", quality=90)
+
+        pieces.append({
+            "id": piece_id,
+            "name": row.get("name", "").strip(),
+            "date": row.get("date", "").strip(),
+            "category": row.get("category", "").strip() or "Uncategorised",
+            "era": row.get("era", "").strip(),
+            "medium": row.get("medium", "").strip(),
+            "description": row.get("description", "").strip(),
+            "thumb": f"sample-photos/{dest.name}",
+            "full": f"sample-photos/{dest.name}",
+            "aspect": round(aspect, 4),
+        })
+
+    pieces.sort(key=lambda p: (p["category"], p["date"]))
+    manifest = {
+        "generated": "local-preview",
+        "hallway": {"width": 6, "wallHeight": 3.2, "spacing": 2.4, "margin": 2.2},
+        "pieces": pieces,
+    }
+    (SITE / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    categories = sorted({p["category"] for p in pieces})
+    print(f"Wrote {len(pieces)} sample pieces across {len(categories)} categories ({', '.join(categories)})")
+    print(f"to {OUT_PHOTOS} and site/manifest.json")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,68 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #05050a; font-family: 'Georgia', 'Times New Roman', serif; color: #eee; }
+#scene-container { position: fixed; inset: 0; cursor: grab; }
+body.touch #scene-container { cursor: default; }
+#scene-container.dragging { cursor: grabbing; }
+#scene-container canvas { display: block; }
+
+.hidden { display: none !important; }
+
+#loading-overlay, #enter-overlay {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, #14141f 0%, #05050a 100%);
+}
+.panel { text-align: center; max-width: 520px; padding: 32px; }
+.panel h1 { font-size: 2.2rem; letter-spacing: 0.08em; margin: 0 0 20px; font-weight: 400; }
+.panel p { font-size: 0.95rem; line-height: 1.5; color: #bbb; margin: 0 0 20px; }
+
+#loading-bar-track { width: 100%; height: 4px; background: #2a2a38; border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+#loading-bar-fill { height: 100%; width: 0%; background: #c9a24b; transition: width 0.2s ease; }
+
+#enter-button {
+  font-family: inherit; font-size: 1rem; letter-spacing: 0.05em;
+  padding: 12px 28px; background: #c9a24b; color: #14141f; border: none;
+  border-radius: 2px; cursor: pointer;
+}
+#enter-button:hover { background: #ddb968; }
+
+body.touch #enter-hint-desktop { display: none; }
+body:not(.touch) #enter-hint-touch { display: none; }
+
+#hint-bar {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  z-index: 5; font-size: 0.8rem; letter-spacing: 0.04em; color: #aaa;
+  background: rgba(5,5,10,0.55); padding: 6px 14px; border-radius: 12px;
+  pointer-events: none;
+}
+
+#info-panel {
+  position: fixed; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(3,3,6,0.82); padding: 24px;
+}
+.info-card {
+  position: relative; max-width: 900px; width: 100%; max-height: 90vh;
+  background: #101018; border: 1px solid #2c2c3a; border-radius: 4px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#info-image { width: 100%; max-height: 60vh; object-fit: contain; background: #000; }
+.info-text { padding: 18px 24px 22px; overflow-y: auto; }
+.info-text h2 { margin: 0 0 6px; font-weight: 400; font-size: 1.4rem; }
+.info-text p { margin: 0 0 8px; color: #bbb; font-size: 0.92rem; line-height: 1.5; }
+#info-meta { color: #c9a24b !important; font-style: italic; }
+#info-close {
+  position: absolute; top: 8px; right: 12px; z-index: 2;
+  background: none; border: none; color: #ddd; font-size: 1.8rem;
+  cursor: pointer; line-height: 1;
+}
+
+#joystick {
+  position: fixed; left: 28px; bottom: 28px; width: 110px; height: 110px;
+  border-radius: 50%; background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.25); z-index: 10; touch-action: none;
+}
+#joystick-knob {
+  position: absolute; top: 50%; left: 50%; width: 46px; height: 46px;
+  margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255,255,255,0.35);
+}

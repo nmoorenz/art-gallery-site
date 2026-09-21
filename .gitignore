@@ -1,0 +1,29 @@
+# Deployment-specific / secret
+.env
+.terraform/
+terraform.tfvars
+*.auto.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Real content -- see example/ for the shape (committed sample data)
+/photos/*
+!/photos/.gitkeep
+!/photos/README.md
+
+# Generated at deploy time, never committed
+build/
+infrastructure/build/
+infrastructure/dist/
+
+# Generated local-preview data
+site/manifest.json
+site/sample-photos/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/

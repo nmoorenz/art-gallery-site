@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>The Gallery</title>
+<link rel="stylesheet" href="style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="scene-container"></div>
+
+  <div id="loading-overlay">
+    <div class="panel">
+      <h1>The Gallery</h1>
+      <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
+      <p id="loading-status">Loading artwork&hellip;</p>
+    </div>
+  </div>
+
+  <div id="enter-overlay" class="hidden">
+    <div class="panel">
+      <h1>The Gallery</h1>
+      <p id="enter-hint-desktop">Click to enter. Click and drag to look around, arrow keys to walk, click a piece to view it up close.</p>
+      <p id="enter-hint-touch">Tap to enter. Drag anywhere to look around, use the joystick to walk, tap a piece to view it up close.</p>
+      <button id="enter-button">Enter the Gallery</button>
+    </div>
+  </div>
+
+  <div id="hint-bar" class="hidden"></div>
+
+  <div id="info-panel" class="hidden">
+    <div class="info-card">
+      <button id="info-close" aria-label="Close">&times;</button>
+      <img id="info-image" src="" alt="" />
+      <div class="info-text">
+        <h2 id="info-title"></h2>
+        <p id="info-meta"></p>
+        <p id="info-notes"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="joystick" class="hidden">
+    <div id="joystick-knob"></div>
+  </div>
+
+  <script type="module" src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

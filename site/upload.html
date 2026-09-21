@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Add Your Art — The Gallery</title>
+<link rel="stylesheet" href="upload.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <h1>Add Your Art! 🖼️</h1>
+      <p>Take a photo, tell us about it, and add it to the gallery.</p>
+    </header>
+
+    <div id="dev-note" class="dev-note">
+      This only works on the live gallery site while logged in as an admin.
+      Opening this file locally (or without logging in) can't save anything.
+    </div>
+
+    <form id="upload-form">
+      <div class="card">
+        <h2><span class="step-num">1</span> Your picture</h2>
+        <input type="file" id="photo-input" accept="image/*" />
+
+        <label for="photo-input" class="photo-drop" id="photo-drop">
+          <span class="icon">📷</span>
+          <span class="label">Add a Photo</span>
+          <span class="sub">Tap here to take a photo or choose one</span>
+        </label>
+
+        <div class="photo-preview-wrap hidden" id="photo-preview-wrap">
+          <img id="photo-preview" src="" alt="Your artwork" />
+          <button type="button" class="retake-btn" id="retake-btn">Choose a different photo</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step-num">2</span> What kind of art is it?</h2>
+        <div class="category-grid" id="category-grid"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step-num">3</span> When was this? <span class="optional-tag">(optional)</span></h2>
+        <div class="era-row" id="era-row"></div>
+        <div class="date-row">
+          📅 <input type="date" id="date-input" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step-num">4</span> What's it called?</h2>
+        <input type="text" id="name-input" class="title-input" placeholder="My Awesome Drawing" maxlength="60" autocomplete="off" />
+      </div>
+
+      <div class="card">
+        <h2><span class="step-num">5</span> What do you want to say about it? <span class="optional-tag">(optional)</span></h2>
+        <textarea id="description-input" class="description-input" placeholder="Tell us about your artwork..." maxlength="500" rows="3"></textarea>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submit-btn" disabled>🎨 Add to the Gallery!</button>
+      <p class="nudge" id="nudge"></p>
+    </form>
+
+    <div id="confirm-screen" class="hidden">
+      <span class="big-emoji">🎉</span>
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-sub"></p>
+      <img id="confirm-image" src="" alt="" />
+      <br />
+      <button type="button" class="add-another-btn" id="add-another-btn">Add Another Piece</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { CATEGORIES, ERAS } from './gallery-taxonomy.js';
+
+    const form = document.getElementById('upload-form');
+    const photoInput = document.getElementById('photo-input');
+    const photoDrop = document.getElementById('photo-drop');
+    const photoPreviewWrap = document.getElementById('photo-preview-wrap');
+    const photoPreview = document.getElementById('photo-preview');
+    const retakeBtn = document.getElementById('retake-btn');
+    const categoryGrid = document.getElementById('category-grid');
+    const eraRow = document.getElementById('era-row');
+    const nameInput = document.getElementById('name-input');
+    const descriptionInput = document.getElementById('description-input');
+    const dateInput = document.getElementById('date-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const nudge = document.getElementById('nudge');
+    const confirmScreen = document.getElementById('confirm-screen');
+    const confirmTitle = document.getElementById('confirm-title');
+    const confirmSub = document.getElementById('confirm-sub');
+    const confirmImage = document.getElementById('confirm-image');
+    const addAnotherBtn = document.getElementById('add-another-btn');
+
+    const SUBMIT_LABEL = submitBtn.textContent;
+
+    for (const c of CATEGORIES) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'category-tile';
+      btn.dataset.category = c.key;
+      btn.style.background = c.color;
+      btn.innerHTML = '<span class="emoji">' + c.emoji + '</span>' + c.key;
+      categoryGrid.appendChild(btn);
+    }
+    for (const era of ERAS) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'era-chip';
+      btn.dataset.era = era;
+      btn.textContent = era;
+      eraRow.appendChild(btn);
+    }
+
+    let selectedFile = null;
+    let photoDataUrl = null;
+    let selectedCategory = null;
+    let selectedEra = null;
+    let submitting = false;
+
+    dateInput.value = new Date().toISOString().slice(0, 10);
+
+    photoInput.addEventListener('change', () => {
+      const file = photoInput.files && photoInput.files[0];
+      if (!file) return;
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        photoDataUrl = reader.result;
+        photoPreview.src = photoDataUrl;
+        photoDrop.classList.add('hidden');
+        photoPreviewWrap.classList.remove('hidden');
+        updateSubmitState();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    retakeBtn.addEventListener('click', () => {
+      selectedFile = null;
+      photoDataUrl = null;
+      photoInput.value = '';
+      photoPreviewWrap.classList.add('hidden');
+      photoDrop.classList.remove('hidden');
+      updateSubmitState();
+    });
+
+    categoryGrid.addEventListener('click', (e) => {
+      const tile = e.target.closest('.category-tile');
+      if (!tile) return;
+      for (const t of categoryGrid.querySelectorAll('.category-tile')) {
+        t.setAttribute('aria-pressed', 'false');
+      }
+      tile.setAttribute('aria-pressed', 'true');
+      selectedCategory = tile.dataset.category;
+      updateSubmitState();
+    });
+
+    // Era is optional -- tapping an already-selected chip clears it again.
+    eraRow.addEventListener('click', (e) => {
+      const chip = e.target.closest('.era-chip');
+      if (!chip) return;
+      const alreadySelected = chip.getAttribute('aria-pressed') === 'true';
+      for (const c of eraRow.querySelectorAll('.era-chip')) {
+        c.setAttribute('aria-pressed', 'false');
+      }
+      if (!alreadySelected) {
+        chip.setAttribute('aria-pressed', 'true');
+        selectedEra = chip.dataset.era;
+      } else {
+        selectedEra = null;
+      }
+    });
+
+    nameInput.addEventListener('input', updateSubmitState);
+
+    function updateSubmitState() {
+      const ready = photoDataUrl && selectedCategory && nameInput.value.trim().length > 0;
+      submitBtn.disabled = !ready || submitting;
+      clearNudge();
+    }
+
+    function clearNudge() {
+      nudge.classList.remove('error');
+      nudge.textContent = '';
+    }
+
+    function showError(message) {
+      nudge.classList.add('error');
+      nudge.textContent = message;
+    }
+
+    // Resizes an already-loaded <img> down to fit within maxEdge x maxEdge
+    // (never upscales), returns a JPEG Blob. Drawing from the on-screen
+    // <img> (rather than raw file bytes) picks up the browser's own
+    // EXIF-aware decoding, so a photo taken sideways on a phone still comes
+    // out right-side-up without any extra library.
+    function resizeToBlob(img, maxEdge, quality) {
+      const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    }
+
+    async function apiError(resp) {
+      let message = 'Something went wrong (' + resp.status + ').';
+      if (resp.status === 401) message = "You're not logged in -- try refreshing the page.";
+      else if (resp.status === 403) message = "This login can't add art -- ask the gallery owner to check your account.";
+      else {
+        try {
+          const body = await resp.json();
+          if (body.error) message = body.error;
+        } catch {}
+      }
+      return new Error(message);
+    }
+
+    async function uploadPiece() {
+      const name = nameInput.value.trim();
+      const description = descriptionInput.value.trim();
+      const date = dateInput.value;
+      const category = selectedCategory;
+      const era = selectedEra;
+
+      const aspect = photoPreview.naturalWidth / photoPreview.naturalHeight;
+      const [fullBlob, thumbBlob] = await Promise.all([
+        resizeToBlob(photoPreview, 2000, 0.85),
+        resizeToBlob(photoPreview, 1000, 0.85),
+      ]);
+
+      const urlResp = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: selectedFile.name }),
+      });
+      if (!urlResp.ok) throw await apiError(urlResp);
+      const { id, uploadUrls } = await urlResp.json();
+
+      await Promise.all([
+        fetch(uploadUrls.orig, { method: 'PUT', body: selectedFile }),
+        fetch(uploadUrls.full, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: fullBlob }),
+        fetch(uploadUrls.thumb, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: thumbBlob }),
+      ]);
+
+      const pieceResp = await fetch('/api/pieces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name, description, date, category, era, aspect }),
+      });
+      if (!pieceResp.ok) throw await apiError(pieceResp);
+
+      return { name, category, era, date };
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (submitting) return;
+      if (submitBtn.disabled) {
+        const missing = [];
+        if (!photoDataUrl) missing.push('a photo');
+        if (!selectedCategory) missing.push('a category');
+        if (!nameInput.value.trim()) missing.push('a name');
+        clearNudge();
+        nudge.textContent = 'Just need ' + missing.join(' and ') + ' first!';
+        return;
+      }
+
+      submitting = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Uploading…';
+      clearNudge();
+
+      uploadPiece()
+        .then((piece) => {
+          confirmTitle.textContent = '"' + piece.name + '" added!';
+          confirmSub.textContent = [piece.category, piece.era, piece.date].filter(Boolean).join(' · ');
+          confirmImage.src = photoDataUrl;
+          form.classList.add('hidden');
+          confirmScreen.classList.remove('hidden');
+        })
+        .catch((err) => {
+          console.error('upload failed', err);
+          showError(err.message || 'Upload failed -- try again.');
+        })
+        .finally(() => {
+          submitting = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = SUBMIT_LABEL;
+        });
+    });
+
+    addAnotherBtn.addEventListener('click', () => {
+      selectedFile = null;
+      photoDataUrl = null;
+      selectedCategory = null;
+      selectedEra = null;
+      photoInput.value = '';
+      nameInput.value = '';
+      descriptionInput.value = '';
+      dateInput.value = new Date().toISOString().slice(0, 10);
+      photoPreviewWrap.classList.add('hidden');
+      photoDrop.classList.remove('hidden');
+      for (const t of categoryGrid.querySelectorAll('.category-tile')) {
+        t.setAttribute('aria-pressed', 'false');
+      }
+      for (const c of eraRow.querySelectorAll('.era-chip')) {
+        c.setAttribute('aria-pressed', 'false');
+      }
+      submitBtn.disabled = true;
+      confirmScreen.classList.add('hidden');
+      form.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log in — The Gallery</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="enter-overlay">
+    <div class="panel">
+      <h1>The Gallery</h1>
+      <p>This is a family gallery — please log in to take a look.</p>
+      <button id="login-button">Log In</button>
+    </div>
+  </div>
+  <script type="module">
+    import { COGNITO_DOMAIN, COGNITO_CLIENT_ID, REDIRECT_URI } from '/config.js';
+    const btn = document.getElementById('login-button');
+    if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+      btn.textContent = 'Login is not configured yet';
+      btn.disabled = true;
+    } else {
+      const url = new URL(COGNITO_DOMAIN.replace(/\/$/, '') + '/login');
+      url.searchParams.set('client_id', COGNITO_CLIENT_ID);
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('scope', 'openid email');
+      url.searchParams.set('redirect_uri', REDIRECT_URI);
+      btn.addEventListener('click', () => { window.location.href = url.toString(); });
+    }
+  </script>
+</body>
+</html>

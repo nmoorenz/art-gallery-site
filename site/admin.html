@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manage Artwork — The Gallery</title>
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <h1>Manage Artwork</h1>
+      <p>Change which room (category) or era a piece belongs to.</p>
+    </header>
+
+    <div class="note">
+      Saving only works for superadmin accounts -- everyone else can look
+      but changes won't stick.
+    </div>
+
+    <input type="search" id="filter-input" class="filter-input" placeholder="Filter by name…" />
+
+    <p id="status-line" class="status-line">Loading pieces&hellip;</p>
+
+    <div id="piece-list" class="piece-list"></div>
+  </div>
+
+  <script type="module">
+    import { MANIFEST_URL } from './config.js';
+    import { CATEGORIES, ERAS } from './gallery-taxonomy.js';
+
+    const filterInput = document.getElementById('filter-input');
+    const statusLine = document.getElementById('status-line');
+    const pieceList = document.getElementById('piece-list');
+
+    let allPieces = [];
+
+    function optionsHtml(values, selected) {
+      return values.map((v) => {
+        const sel = v === selected ? ' selected' : '';
+        return '<option value="' + v + '"' + sel + '>' + v + '</option>';
+      }).join('');
+    }
+
+    function pieceCard(piece) {
+      const card = document.createElement('div');
+      card.className = 'piece-card';
+
+      const categoryKeys = CATEGORIES.map((c) => c.key);
+      // A piece could carry a category no longer in the list (e.g. renamed
+      // upstream) -- keep it selectable rather than silently discarding it.
+      const categoryOptions = categoryKeys.includes(piece.category)
+        ? categoryKeys
+        : [piece.category, ...categoryKeys];
+      const eraOptions = ['', ...ERAS];
+
+      card.innerHTML = `
+        <img class="thumb" src="${piece.thumb}" alt="" loading="lazy" />
+        <div class="fields">
+          <div class="name">${piece.name || 'Untitled'}</div>
+          <div class="meta">${[piece.date, piece.era].filter(Boolean).join(' · ') || '&nbsp;'}</div>
+          <label>
+            Category
+            <select class="category-select">${optionsHtml(categoryOptions, piece.category)}</select>
+          </label>
+          <label>
+            Era
+            <select class="era-select">${optionsHtml(eraOptions, piece.era || '')}</select>
+          </label>
+          <div class="row-actions">
+            <button type="button" class="save-btn">Save</button>
+            <span class="row-status"></span>
+          </div>
+        </div>
+      `;
+
+      const saveBtn = card.querySelector('.save-btn');
+      const rowStatus = card.querySelector('.row-status');
+      const categorySelect = card.querySelector('.category-select');
+      const eraSelect = card.querySelector('.era-select');
+
+      saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        rowStatus.className = 'row-status';
+        rowStatus.textContent = 'Saving…';
+        try {
+          const resp = await fetch(`/api/pieces/${encodeURIComponent(piece.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: categorySelect.value, era: eraSelect.value }),
+          });
+          if (!resp.ok) {
+            let message = 'Save failed (' + resp.status + ').';
+            if (resp.status === 401) message = "You're not logged in -- try refreshing the page.";
+            else if (resp.status === 403) message = 'Only a superadmin can save changes.';
+            else {
+              try {
+                const body = await resp.json();
+                if (body.error) message = body.error;
+              } catch {}
+            }
+            throw new Error(message);
+          }
+          const { piece: updated } = await resp.json();
+          piece.category = updated.category;
+          piece.era = updated.era;
+          rowStatus.className = 'row-status good';
+          rowStatus.textContent = 'Saved!';
+        } catch (err) {
+          rowStatus.className = 'row-status error';
+          rowStatus.textContent = err.message || 'Save failed -- try again.';
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+
+      return card;
+    }
+
+    function render(pieces) {
+      pieceList.innerHTML = '';
+      if (pieces.length === 0) {
+        pieceList.innerHTML = '<p class="empty">No pieces match.</p>';
+        return;
+      }
+      for (const piece of pieces) {
+        pieceList.appendChild(pieceCard(piece));
+      }
+    }
+
+    function applyFilter() {
+      const q = filterInput.value.trim().toLowerCase();
+      const filtered = q
+        ? allPieces.filter((p) => (p.name || '').toLowerCase().includes(q))
+        : allPieces;
+      render(filtered);
+    }
+
+    filterInput.addEventListener('input', applyFilter);
+
+    async function load() {
+      try {
+        const res = await fetch(MANIFEST_URL, { cache: 'no-store', credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Could not load the piece list (' + res.status + ').');
+        const manifest = await res.json();
+        allPieces = manifest.pieces || [];
+        statusLine.textContent = allPieces.length + ' piece' + (allPieces.length === 1 ? '' : 's') + ' -- click Save after changing a dropdown.';
+        applyFilter();
+      } catch (err) {
+        statusLine.textContent = err.message || 'Something went wrong loading pieces.';
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
