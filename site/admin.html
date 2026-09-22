@@ -54,10 +54,15 @@
         : [piece.category, ...categoryKeys];
       const eraOptions = ['', ...ERAS];
 
+      // Pieces from before the images[] schema still just have a top-level
+      // thumb -- fall back to that so old and new pieces both render here.
+      const images = (piece.images && piece.images.length) ? piece.images : [{ thumb: piece.thumb }];
+      const photoBadge = images.length > 1 ? `<span class="photo-badge">${images.length} photos</span>` : '';
+
       card.innerHTML = `
-        <img class="thumb" src="${piece.thumb}" alt="" loading="lazy" />
+        <img class="thumb" src="${images[0].thumb}" alt="" loading="lazy" />
         <div class="fields">
-          <div class="name">${piece.name || 'Untitled'}</div>
+          <div class="name">${piece.name || 'Untitled'} ${photoBadge}</div>
           <div class="meta">${[piece.date, piece.era].filter(Boolean).join(' · ') || '&nbsp;'}</div>
           <label>
             Category

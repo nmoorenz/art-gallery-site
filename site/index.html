@@ -28,7 +28,7 @@
   <div id="enter-overlay" class="hidden">
     <div class="panel">
       <h1>The Gallery</h1>
-      <p id="enter-hint-desktop">Click to enter. Click and drag to look around, arrow keys to walk, click a piece to view it up close.</p>
+      <p id="enter-hint-desktop">Click to enter. Click and drag to look around, WASD to walk, left/right arrows to turn, click a piece to view it up close.</p>
       <p id="enter-hint-touch">Tap to enter. Drag anywhere to look around, use the joystick to walk, tap a piece to view it up close.</p>
       <button id="enter-button">Enter the Gallery</button>
     </div>
@@ -39,7 +39,12 @@
   <div id="info-panel" class="hidden">
     <div class="info-card">
       <button id="info-close" aria-label="Close">&times;</button>
-      <img id="info-image" src="" alt="" />
+      <div id="info-image-wrap">
+        <img id="info-image" src="" alt="" />
+        <button id="info-prev" class="info-nav hidden" aria-label="Previous image">&#10094;</button>
+        <button id="info-next" class="info-nav hidden" aria-label="Next image">&#10095;</button>
+        <div id="info-image-counter" class="hidden"></div>
+      </div>
       <div class="info-text">
         <h2 id="info-title"></h2>
         <p id="info-meta"></p>

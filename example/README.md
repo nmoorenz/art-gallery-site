@@ -3,8 +3,14 @@
 Committed sample data, in exactly the shape `photos/` (gitignored, your
 real data) is expected to be in:
 
-- `artwork.csv` -- one row per piece: `id,name,date,category,era,medium,description`.
-- `<id>.jpg` -- one image per piece, matching the `id` column.
+- `artwork.csv` -- one row per image: `id,name,date,category,era,medium,description,group_id,label`.
+  Rows that share a non-empty `group_id` become one piece with multiple
+  images (say, the front and back of a page) -- each row still keeps its
+  own `id` and file, so grouping never means renaming anything. `label`
+  is an optional per-image caption ("Front", "Back", ...). See
+  [`../scripts/README.md`](../scripts/README.md#sync_gallerypy) for the
+  full rule.
+- `<id>.jpg` -- one image per row, matching that row's `id` column.
 
 20 real, public-domain paintings and prints (5 each from Rembrandt, Monet,
 Van Gogh, and Hokusai -- all long out of copyright), one `category` per

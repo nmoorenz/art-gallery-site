@@ -46,7 +46,23 @@ body:not(.touch) #enter-hint-touch { display: none; }
   background: #101018; border: 1px solid #2c2c3a; border-radius: 4px;
   display: flex; flex-direction: column; overflow: hidden;
 }
-#info-image { width: 100%; max-height: 60vh; object-fit: contain; background: #000; }
+#info-image-wrap { position: relative; background: #000; }
+#info-image { display: block; width: 100%; max-height: 60vh; object-fit: contain; background: #000; }
+.info-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(5,5,10,0.55); border: 1px solid rgba(255,255,255,0.25);
+  color: #eee; font-size: 1rem; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.info-nav:hover { background: rgba(5,5,10,0.8); }
+#info-prev { left: 12px; }
+#info-next { right: 12px; }
+#info-image-counter {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  background: rgba(5,5,10,0.6); color: #ddd; font-size: 0.8rem;
+  padding: 3px 12px; border-radius: 10px; letter-spacing: 0.03em;
+}
 .info-text { padding: 18px 24px 22px; overflow-y: auto; }
 .info-text h2 { margin: 0 0 6px; font-weight: 400; font-size: 1.4rem; }
 .info-text p { margin: 0 0 8px; color: #bbb; font-size: 0.92rem; line-height: 1.5; }

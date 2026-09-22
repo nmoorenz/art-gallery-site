@@ -15,7 +15,11 @@ of static pages. No build tooling -- every file here is served as-is.
   WASD walks (A/D strafe) and the up/down arrows also walk, while the
   left/right arrows turn in place instead of strafing; touch uses the
   joystick to walk. Click/tap a piece for an info panel (name,
-  date, era, medium, description, full-resolution image).
+  date, era, medium, description, full-resolution image). A piece can
+  carry more than one image (e.g. the front and back of a page) -- it
+  still gets a single wall frame, showing the first image as the cover,
+  and the info panel adds prev/next buttons and an "N of M" counter
+  (also the left/right arrow keys) to flip through the rest.
 - **`login.html`** -- sends the browser to the Cognito Hosted UI.
 - **`upload.html`** -- admin/superadmin-only upload form: photo picker
   with live preview, category tiles and era chips (from

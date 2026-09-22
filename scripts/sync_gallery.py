@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Gallery sync CLI: check/sync/download for a single-photo-per-piece art
-gallery.
+Gallery sync CLI: check/sync/download for the art gallery.
 
 This is a one-time bootstrap/import tool, not the ongoing way art gets
 added. Once the site is deployed, uploads go through the web upload form
@@ -12,38 +11,62 @@ real uploads on it would overwrite them. Only use it to import an initial
 batch of art before anyone starts using the web form.
 
 Data model:
-  photos/artwork.csv  one row per piece: id,name,date,category,era,medium,description
+  photos/artwork.csv  one row per IMAGE:
+                      id,name,date,category,era,medium,description,group_id,label
                       -- category decides which room/corridor a piece is
                       hung in; era (daycare, year 1, ...) is just a tag
                       shown on the piece and does not affect layout.
+                      Rows that share a non-empty group_id become ONE piece
+                      (one wall frame) with multiple images -- for art with
+                      more than one side or photo (e.g. the front and back
+                      of a page). Each row still keeps its own id and its
+                      own photos/<id>.<ext> file; grouping never requires
+                      renaming a file. label is an optional per-image tag
+                      ("Front", "Back", "Page 2", ...) shown next to that
+                      image in the info panel. For a grouped piece, the
+                      name/date/category/era/medium/description columns are
+                      only read off the FIRST row in the group -- fill them
+                      in on every row if it's easier to edit, but only the
+                      first is used. A row with no group_id is its own
+                      single-image piece, same as before.
                       Gitignored -- see example/ (repo root) for a committed
                       folder in the same shape with invented content; copy
                       its artwork.csv to photos/artwork.csv as a starting
                       point, or start from scratch.
-  photos/<id>.<ext>   one image per piece (jpg/jpeg/png), named to match
-                      the id column, alongside artwork.csv. Gitignored.
+  photos/<id>.<ext>   one image per CSV row (jpg/jpeg/png), named to match
+                      that row's id column, alongside artwork.csv.
+                      Gitignored.
 
 S3 layout (bucket root):
   site/...            the static site (see scripts/deploy_site.sh)
   photos/manifest.json
-  photos/<id>/thumb.jpg   in-scene wall texture
-  photos/<id>/full.jpg    info-panel / lightbox image
+  photos/<id>/thumb.jpg   in-scene wall texture (per image)
+  photos/<id>/full.jpg    info-panel / lightbox image (per image)
   photos/<id>/orig/<filename>   untouched original, archived, not public
+
+Each manifest piece carries an `images` array (one entry per photo, in CSV
+row order): [{id, label, thumb, full, aspect}, ...]. A single-image piece
+just has a one-element images array -- there's no separate "singular" shape
+to keep in sync.
 
 Commands:
   check     Join photos/artwork.csv against the images in photos/ locally.
             No AWS calls.
-  sync      Build thumb+full derivatives for every piece, upload everything
+  sync      Build thumb+full derivatives for every image, upload everything
             (including manifest.json) to S3 under photos/, and write a local
             copy to photos/manifest.json (gitignored) for your own
             reference.
   download  Print bucket size and pull full-resolution originals from S3
             into photos/ -- for setting up a new machine.
   export    Write the pieces in the deployed manifest back out to a CSV in
-            the same shape as photos/artwork.csv, including anything added
-            through the web upload form.
-  rename    Move a piece's images and manifest entry to a new id.
-  delete    Remove a piece from the manifest, optionally with its images.
+            the same shape as photos/artwork.csv (one row per image,
+            group_id filled in for multi-image pieces), including anything
+            added through the web upload form.
+  rename    Move a single-image piece's images and manifest entry to a new
+            id. Not supported for multi-image (grouped) pieces yet -- edit
+            manifest.json by hand for those.
+  delete    Remove a piece from the manifest, optionally with all of its
+            images.
 
 The last three read and write the deployed photos/manifest.json in place
 rather than rebuilding it, so they are safe to use on a live gallery.
@@ -144,46 +167,86 @@ def make_derivative(img: Image.Image, max_edge: int) -> bytes:
     return buf.getvalue()
 
 
+def group_rows(rows):
+    """Group CSV rows into pieces: rows sharing a non-empty group_id become
+    one piece with multiple images (in CSV order); every other row is its
+    own single-image piece. Returns a list of (piece_id, [row, ...])."""
+    groups = []
+    index_of = {}
+    for row in rows:
+        gid = (row.get("group_id") or "").strip()
+        if gid:
+            if gid not in index_of:
+                index_of[gid] = len(groups)
+                groups.append((gid, []))
+            groups[index_of[gid]][1].append(row)
+        else:
+            groups.append((row["id"].strip(), [row]))
+    return groups
+
+
 def cmd_sync(_args):
     bucket, region = load_env()
     client = s3_client(region)
     rows = read_rows()
 
     pieces = []
-    for row in rows:
-        piece_id = row["id"].strip()
-        photo = find_photo(piece_id)
-        if not photo:
-            print(f"WARN: skipping {piece_id} -- no photo found in photos/")
-            continue
+    for _gid, group in group_rows(rows):
+        images = []
+        piece_meta = None
+        for row in group:
+            piece_id = row["id"].strip()
+            photo = find_photo(piece_id)
+            if not photo:
+                print(f"WARN: skipping {piece_id} -- no photo found in photos/")
+                continue
 
-        with Image.open(photo) as raw:
-            raw = ImageOps.exif_transpose(raw)
-            aspect = raw.width / raw.height
-            thumb_bytes = make_derivative(raw, THUMB_MAX)
-            full_bytes = make_derivative(raw, FULL_MAX)
+            with Image.open(photo) as raw:
+                raw = ImageOps.exif_transpose(raw)
+                aspect = raw.width / raw.height
+                thumb_bytes = make_derivative(raw, THUMB_MAX)
+                full_bytes = make_derivative(raw, FULL_MAX)
 
-        thumb_key = f"photos/{piece_id}/thumb.jpg"
-        full_key = f"photos/{piece_id}/full.jpg"
-        orig_key = f"photos/{piece_id}/orig/{photo.name}"
+            thumb_key = f"photos/{piece_id}/thumb.jpg"
+            full_key = f"photos/{piece_id}/full.jpg"
+            orig_key = f"photos/{piece_id}/orig/{photo.name}"
 
-        client.put_object(Bucket=bucket, Key=thumb_key, Body=thumb_bytes, ContentType="image/jpeg")
-        client.put_object(Bucket=bucket, Key=full_key, Body=full_bytes, ContentType="image/jpeg")
-        client.upload_file(str(photo), bucket, orig_key)  # untouched original, archived, not in manifest
+            client.put_object(Bucket=bucket, Key=thumb_key, Body=thumb_bytes, ContentType="image/jpeg")
+            client.put_object(Bucket=bucket, Key=full_key, Body=full_bytes, ContentType="image/jpeg")
+            client.upload_file(str(photo), bucket, orig_key)  # untouched original, archived, not in manifest
+
+            images.append({
+                "id": piece_id,
+                "label": (row.get("label") or "").strip(),
+                "thumb": f"/{thumb_key}",
+                "full": f"/{full_key}",
+                "aspect": round(aspect, 4),
+            })
+            print(f"synced {piece_id} ({row.get('name', '')})")
+
+            if piece_meta is None:
+                piece_meta = row
+            else:
+                other_category = row.get("category", "").strip()
+                if other_category and other_category != piece_meta.get("category", "").strip():
+                    print(
+                        f"WARN: {piece_id} has category '{other_category}', different from "
+                        f"the rest of its group -- using '{piece_meta.get('category', '').strip()}'"
+                    )
+
+        if not images:
+            continue  # every row in this group was missing a photo
 
         pieces.append({
-            "id": piece_id,
-            "name": row.get("name", "").strip(),
-            "date": row.get("date", "").strip(),
-            "category": row.get("category", "").strip() or "Uncategorised",
-            "era": row.get("era", "").strip(),
-            "medium": row.get("medium", "").strip(),
-            "description": row.get("description", "").strip(),
-            "thumb": f"/{thumb_key}",
-            "full": f"/{full_key}",
-            "aspect": round(aspect, 4),
+            "id": images[0]["id"],
+            "name": piece_meta.get("name", "").strip(),
+            "date": piece_meta.get("date", "").strip(),
+            "category": piece_meta.get("category", "").strip() or "Uncategorised",
+            "era": piece_meta.get("era", "").strip(),
+            "medium": piece_meta.get("medium", "").strip(),
+            "description": piece_meta.get("description", "").strip(),
+            "images": images,
         })
-        print(f"synced {piece_id} ({row.get('name', '')})")
 
     # human-readable order: grouped by category, chronological within each
     # (the frontend does its own grouping/sorting from this same data --
@@ -203,7 +266,11 @@ def cmd_sync(_args):
         ContentType="application/json",
         CacheControl="no-cache",
     )
-    print(f"\nWrote {MANIFEST_PATH.relative_to(ROOT)} ({len(pieces)} pieces) and uploaded it to s3://{bucket}/photos/manifest.json")
+    image_count = sum(len(p["images"]) for p in pieces)
+    print(
+        f"\nWrote {MANIFEST_PATH.relative_to(ROOT)} ({len(pieces)} piece(s), {image_count} image(s)) "
+        f"and uploaded it to s3://{bucket}/photos/manifest.json"
+    )
     print("Remember to invalidate the CloudFront distribution for /photos/manifest.json")
     print("if you need viewers to see the update immediately (see infrastructure/README.md).")
 
@@ -229,7 +296,7 @@ def cmd_download(_args):
 
 
 MANIFEST_KEY = "photos/manifest.json"
-CSV_COLUMNS = ["id", "name", "date", "category", "era", "medium", "description"]
+CSV_COLUMNS = ["id", "name", "date", "category", "era", "medium", "description", "group_id", "label"]
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
@@ -258,11 +325,20 @@ def find_piece(manifest, piece_id):
     return next((p for p in manifest.get("pieces", []) if p.get("id") == piece_id), None)
 
 
-def piece_keys(client, bucket, piece_id):
-    """Every object under photos/<id>/ -- thumb, full and the archived orig."""
+def piece_image_ids(piece):
+    """Every image id belonging to a piece -- its `images` array if present,
+    else just its own id (a piece from before the images-array schema)."""
+    images = piece.get("images")
+    if images:
+        return [img["id"] for img in images if img.get("id")]
+    return [piece["id"]]
+
+
+def piece_keys(client, bucket, image_id):
+    """Every object under photos/<image_id>/ -- thumb, full and the archived orig."""
     paginator = client.get_paginator("list_objects_v2")
     keys = []
-    for page in paginator.paginate(Bucket=bucket, Prefix=f"photos/{piece_id}/"):
+    for page in paginator.paginate(Bucket=bucket, Prefix=f"photos/{image_id}/"):
         keys.extend(obj["Key"] for obj in page.get("Contents", []))
     return sorted(keys)
 
@@ -278,12 +354,27 @@ def cmd_export(args):
         sys.exit(f"{target} already exists -- pass --force to overwrite, or --out somewhere else.")
 
     target.parent.mkdir(parents=True, exist_ok=True)
+    row_count = 0
     with target.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         for piece in pieces:
-            writer.writerow({column: piece.get(column, "") for column in CSV_COLUMNS})
-    print(f"Wrote {len(pieces)} piece(s) to {target}")
+            images = piece.get("images") or [{"id": piece.get("id", ""), "label": ""}]
+            multi = len(images) > 1
+            for image in images:
+                writer.writerow({
+                    "id": image.get("id", ""),
+                    "group_id": piece.get("id", "") if multi else "",
+                    "label": image.get("label", "") if multi else "",
+                    "name": piece.get("name", ""),
+                    "date": piece.get("date", ""),
+                    "category": piece.get("category", ""),
+                    "era": piece.get("era", ""),
+                    "medium": piece.get("medium", ""),
+                    "description": piece.get("description", ""),
+                })
+                row_count += 1
+    print(f"Wrote {row_count} row(s) across {len(pieces)} piece(s) to {target}")
 
 
 def cmd_rename(args):
@@ -300,6 +391,13 @@ def cmd_rename(args):
     if find_piece(manifest, args.to) is not None:
         sys.exit(f"'{args.to}' already exists.")
 
+    image_ids = piece_image_ids(piece)
+    if len(image_ids) > 1:
+        sys.exit(
+            f"'{args.piece}' has {len(image_ids)} images (a grouped piece) -- rename isn't "
+            "supported for those yet. Edit photos/manifest.json by hand if you need to."
+        )
+
     for key in piece_keys(client, bucket, args.piece):
         new_key = key.replace(f"photos/{args.piece}/", f"photos/{args.to}/", 1)
         print(f"mv {key} -> {new_key}")
@@ -307,8 +405,13 @@ def cmd_rename(args):
         client.delete_object(Bucket=bucket, Key=key)
 
     piece["id"] = args.to
-    piece["thumb"] = f"/photos/{args.to}/thumb.jpg"
-    piece["full"] = f"/photos/{args.to}/full.jpg"
+    if piece.get("images"):
+        piece["images"][0]["id"] = args.to
+        piece["images"][0]["thumb"] = f"/photos/{args.to}/thumb.jpg"
+        piece["images"][0]["full"] = f"/photos/{args.to}/full.jpg"
+    else:
+        piece["thumb"] = f"/photos/{args.to}/thumb.jpg"
+        piece["full"] = f"/photos/{args.to}/full.jpg"
     write_manifest(client, bucket, manifest)
     print(f"Renamed '{args.piece}' to '{args.to}'. Update the id in photos/artwork.csv too.")
 
@@ -322,16 +425,18 @@ def cmd_delete(args):
     if piece is None:
         sys.exit(f"No piece '{args.piece}' in the manifest.")
 
+    image_ids = piece_image_ids(piece)
     if not args.yes:
-        extra = " and delete its images" if args.photos else ""
+        extra = f" and delete its {len(image_ids)} image(s)" if args.photos else ""
         print(f"Would remove '{args.piece}' ({piece.get('name', '')}){extra}. Re-run with --yes.")
         return
 
     manifest["pieces"] = [p for p in manifest["pieces"] if p.get("id") != args.piece]
     if args.photos:
-        for key in piece_keys(client, bucket, args.piece):
-            print(f"rm {key}")
-            client.delete_object(Bucket=bucket, Key=key)
+        for image_id in image_ids:
+            for key in piece_keys(client, bucket, image_id):
+                print(f"rm {key}")
+                client.delete_object(Bucket=bucket, Key=key)
 
     write_manifest(client, bucket, manifest)
     print(f"Removed '{args.piece}' from the manifest.")
@@ -349,7 +454,7 @@ def main():
     p_ex.add_argument("--force", action="store_true", help="overwrite an existing file")
     p_ex.set_defaults(func=cmd_export)
 
-    p_rn = sub.add_parser("rename", help="move a piece's images and manifest entry to a new id")
+    p_rn = sub.add_parser("rename", help="move a single-image piece's images and manifest entry to a new id")
     p_rn.add_argument("--piece", required=True, help="current piece id")
     p_rn.add_argument("--to", required=True, help="new piece id")
     p_rn.set_defaults(func=cmd_rename)

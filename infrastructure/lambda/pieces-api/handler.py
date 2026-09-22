@@ -235,9 +235,18 @@ def handle_create_piece(event, claims):
         "category": str(body.get("category") or "").strip() or "Uncategorised",
         "era": str(body.get("era") or "").strip(),
         "medium": str(body.get("medium") or "").strip(),
-        "thumb": "/photos/%s/thumb.jpg" % piece_id,
-        "full": "/photos/%s/full.jpg" % piece_id,
-        "aspect": aspect,
+        # A piece uploaded through the web form is always a single image --
+        # grouping multiple images into one piece is CSV/admin only for now
+        # (see scripts/sync_gallery.py) -- but it still gets the same
+        # images[] shape every other piece uses, so the frontend never has
+        # to special-case where a piece came from.
+        "images": [{
+            "id": piece_id,
+            "label": "",
+            "thumb": "/photos/%s/thumb.jpg" % piece_id,
+            "full": "/photos/%s/full.jpg" % piece_id,
+            "aspect": aspect,
+        }],
         "uploadedBy": display_name(claims),
         "uploadedAt": now_iso(),
     }

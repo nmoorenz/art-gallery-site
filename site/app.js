@@ -17,6 +17,9 @@ const infoTitle = document.getElementById('info-title');
 const infoMeta = document.getElementById('info-meta');
 const infoNotes = document.getElementById('info-notes');
 const infoClose = document.getElementById('info-close');
+const infoPrev = document.getElementById('info-prev');
+const infoNext = document.getElementById('info-next');
+const infoCounter = document.getElementById('info-image-counter');
 const joystick = document.getElementById('joystick');
 const joystickKnob = document.getElementById('joystick-knob');
 
@@ -279,6 +282,12 @@ function makeLabelSprite(text) {
 // ---------------------------------------------------------------------------
 // Place artwork along a corridor's two walls, alternating sides
 // ---------------------------------------------------------------------------
+function piecesImages(piece) {
+  if (Array.isArray(piece.images) && piece.images.length) return piece.images;
+  // legacy manifest shape, from before pieces carried an images[] array
+  return [{ id: piece.id, label: '', thumb: piece.thumb, full: piece.full || piece.thumb, aspect: piece.aspect }];
+}
+
 function placePieces(pieces, group, width, textureLoader) {
   const spacing = 2.4;
   const margin = 2.2;
@@ -288,7 +297,9 @@ function placePieces(pieces, group, width, textureLoader) {
     const side = i % 2 === 0 ? 'left' : 'right';
     const row = Math.floor(i / 2);
     const z = -(margin + row * spacing);
-    const aspect = piece.aspect && piece.aspect > 0 ? piece.aspect : 1.3;
+    const images = piecesImages(piece);
+    const cover = images[0];
+    const aspect = cover.aspect && cover.aspect > 0 ? cover.aspect : 1.3;
 
     let imgW, imgH;
     if (aspect >= 1) { imgW = FRAME_MAX_W; imgH = FRAME_MAX_W / aspect; }
@@ -318,12 +329,12 @@ function placePieces(pieces, group, width, textureLoader) {
       era: piece.era || '',
       medium: piece.medium || '',
       notes: piece.description || '',
-      fullUrl: piece.full || piece.thumb,
+      images,
     };
     group.add(pic);
     raycastTargets.push(pic);
 
-    textureLoader.load(piece.thumb, (tex) => {
+    textureLoader.load(cover.thumb, (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
       if (side === 'left') {
         // the left-wall plane is mirrored by its +90 deg rotation; flip the
@@ -485,8 +496,18 @@ function setupTouchJoystick() {
 function setupInfoPanel() {
   infoClose.addEventListener('click', closeInfoPanel);
   infoPanel.addEventListener('click', (e) => { if (e.target === infoPanel) closeInfoPanel(); });
-  document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && infoPanelOpen) closeInfoPanel(); });
+  infoPrev.addEventListener('click', showPrevImage);
+  infoNext.addEventListener('click', showNextImage);
+  document.addEventListener('keydown', (e) => {
+    if (!infoPanelOpen) return;
+    if (e.code === 'Escape') closeInfoPanel();
+    else if (e.code === 'ArrowLeft') showPrevImage();
+    else if (e.code === 'ArrowRight') showNextImage();
+  });
 }
+
+let currentImages = [];
+let currentImageIndex = 0;
 
 function openInfoPanel(data) {
   infoPanelOpen = true;
@@ -494,9 +515,37 @@ function openInfoPanel(data) {
   const metaParts = [data.date, data.era, data.medium].filter(Boolean);
   infoMeta.textContent = metaParts.join(' · ');
   infoNotes.textContent = data.notes || '';
-  infoImage.src = data.fullUrl || '';
-  infoImage.alt = data.title;
+  currentImages = (data.images && data.images.length) ? data.images : [{ full: data.fullUrl, thumb: data.fullUrl, label: '' }];
+  currentImageIndex = 0;
+  updateInfoImage();
   infoPanel.classList.remove('hidden');
+}
+
+function updateInfoImage() {
+  const image = currentImages[currentImageIndex];
+  infoImage.src = (image && (image.full || image.thumb)) || '';
+  infoImage.alt = infoTitle.textContent;
+  const showNav = currentImages.length > 1;
+  infoPrev.classList.toggle('hidden', !showNav);
+  infoNext.classList.toggle('hidden', !showNav);
+  infoCounter.classList.toggle('hidden', !showNav);
+  if (showNav) {
+    const parts = [`${currentImageIndex + 1} / ${currentImages.length}`];
+    if (image.label) parts.push(image.label);
+    infoCounter.textContent = parts.join(' · ');
+  }
+}
+
+function showPrevImage() {
+  if (currentImages.length < 2) return;
+  currentImageIndex = (currentImageIndex - 1 + currentImages.length) % currentImages.length;
+  updateInfoImage();
+}
+
+function showNextImage() {
+  if (currentImages.length < 2) return;
+  currentImageIndex = (currentImageIndex + 1) % currentImages.length;
+  updateInfoImage();
 }
 
 function closeInfoPanel() {

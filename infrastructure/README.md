@@ -58,8 +58,15 @@ python scripts/tf.py <any terraform subcommand and args>
    python scripts/tf.py cert
    ```
    `cert` applies the certificate alone and prints its validation record.
-   Add that CNAME at your DNS registrar (name -> value), wait for it to
-   resolve, then:
+   Add that CNAME at your DNS registrar (name -> value), then check DNS
+   first and ACM second:
+   ```powershell
+   Resolve-DnsName _a1b2c3d4e5.gallery.example.com -Type CNAME
+   aws acm list-certificates --region us-east-1 --profile $env:AWS_PROFILE `
+     --query "CertificateSummaryList[?DomainName=='$env:DOMAIN_NAME'].Status"
+   ```
+   The record resolves within minutes of adding it; ACM moves from
+   `PENDING_VALIDATION` to `ISSUED` within about another 30. Then:
    ```
    python scripts/tf.py apply
    ```

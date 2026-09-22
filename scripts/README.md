@@ -52,12 +52,17 @@ time rather than merging.
 Data layout (gitignored, not committed -- see
 [`example/README.md`](../example/README.md) for a committed folder in the
 same shape):
-- `photos/artwork.csv` -- one row per piece:
-  `id,name,date,category,era,medium,description`. `category` decides
-  which room/corridor a piece is shown in; `era` is just a tag. Copy
+- `photos/artwork.csv` -- one row per image:
+  `id,name,date,category,era,medium,description,group_id,label`.
+  `category` decides which room/corridor a piece is shown in; `era` is
+  just a tag. Rows that share a non-empty `group_id` become one piece
+  with several images (front/back of a page, more than one photo of the
+  same piece, ...) -- each row keeps its own `id` and file, and only the
+  first row in a group's name/date/category/era/medium/description
+  columns are used. `label` is an optional per-image caption. Copy
   `example/artwork.csv` to `photos/artwork.csv` and fill in your own rows.
-- `photos/<id>.<ext>` -- one image per piece (jpg/jpeg/png), matching the
-  `id` column, alongside `artwork.csv`.
+- `photos/<id>.<ext>` -- one image per row (jpg/jpeg/png), matching that
+  row's `id` column, alongside `artwork.csv`.
 
 ```
 python scripts/sync_gallery.py check      # join photos/artwork.csv against the images in photos/, no AWS calls
@@ -71,9 +76,12 @@ python scripts/sync_gallery.py delete --piece ID [--photos] --yes
 `export`, `rename` and `delete` edit the deployed `photos/manifest.json` in
 place rather than rebuilding it, so they are safe on a live gallery --
 `export` is how art added through the web upload form gets back into
-`photos/artwork.csv`. `delete` drops the piece from the manifest; add
-`--photos` to remove its images from S3 as well. Both `rename` and `delete`
-report what they would do until you pass `--yes`.
+`photos/artwork.csv` (writing one row per image, with `group_id` filled in
+for multi-image pieces). `delete` drops the piece from the manifest,
+including every image it has; add `--photos` to remove them from S3 as
+well. `rename` only works on a single-image piece -- edit
+`photos/manifest.json` by hand to rename a grouped one. Both `rename` and
+`delete` report what they would do until you pass `--yes`.
 
 ## build_local_preview.py
 
