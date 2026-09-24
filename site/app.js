@@ -335,14 +335,12 @@ function placePieces(pieces, group, width, textureLoader) {
     raycastTargets.push(pic);
 
     textureLoader.load(cover.thumb, (tex) => {
+      // Both walls' picture planes already read the texture the right way
+      // round once rotated into place -- a U-axis flip here was previously
+      // applied to the left wall on the (incorrect) assumption its +90 deg
+      // rotation mirrored it; that flip was the actual bug, mirroring left-
+      // wall images while the untouched right wall stayed correct.
       tex.colorSpace = THREE.SRGBColorSpace;
-      if (side === 'left') {
-        // the left-wall plane is mirrored by its +90 deg rotation; flip the
-        // texture's U axis back so text/signatures read the right way round.
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.repeat.x = -1;
-        tex.offset.x = 1;
-      }
       picMat.map = tex;
       picMat.needsUpdate = true;
     });
